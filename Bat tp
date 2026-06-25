@@ -1,0 +1,413 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local LP = Players.LocalPlayer
+
+-- // TEMA: BRANCO + ROXO
+local ROXO_PRINCIPAL = Color3.fromRGB(120, 20, 220)
+local ROXO_CLARO     = Color3.fromRGB(170, 80, 255)
+local BRANCO         = Color3.fromRGB(255, 255, 255)
+local CINZA_ESCURO   = Color3.fromRGB(50, 50, 60)
+local FUNDO          = Color3.fromRGB(248, 248, 255)
+local CARTAO         = Color3.fromRGB(240, 240, 252)
+local BORDA          = Color3.fromRGB(180, 150, 255)
+local BOTAO_FUNDO    = Color3.fromRGB(230, 220, 255)
+
+-- // ESTADO
+local State = {
+    autoBatToggled = false,
+    hittingCooldown = false,
+    guiVisible = true,
+    mobileMode = false,
+}
+
+local Keys = {
+    autoBat = Enum.KeyCode.X,
+    autoBatType = "Keyboard",
+    guiHide = Enum.KeyCode.LeftControl,
+}
+
+local h, hrp = nil, nil
+
+-- // CONFIGURAÇÕES
+local function saveConfig()
+    local cfg = {
+        autoBatKey = Keys.autoBat.Name,
+        autoBatKeyType = Keys.autoBatType,
+        mobileMode = State.mobileMode,
+    }
+    pcall(function() writefile("CSQHubBatTPConfig.json", HttpService:JSONEncode(cfg)) end)
+end
+
+local function loadConfig()
+    local temArquivo = false
+    pcall(function() temArquivo = isfile("CSQHubBatTPConfig.json") end)
+    if not temArquivo then return end
+    local ok, cfg = pcall(function() return HttpService:JSONDecode(readfile("CSQHubBatTPConfig.json")) end)
+    if not ok or not cfg then return end
+    if cfg.autoBatKey and Enum.KeyCode[cfg.autoBatKey] then Keys.autoBat = Enum.KeyCode[cfg.autoBatKey] end
+    if cfg.autoBatKeyType then Keys.autoBatType = cfg.autoBatKeyType end
+    if cfg.mobileMode ~= nil then State.mobileMode = cfg.mobileMode end
+end
+
+loadConfig()
+
+-- // LIMPAR INTERFACES ANTIGAS
+for _, nome in pairs({"CSQHubBatTPGUI", "EnvyAutoBatDesyncGUI", "MwvaneNewaBatDesyncGUI"}) do
+    local antigo = game:GetService("CoreGui"):FindFirstChild(nome)
+    if antigo then antigo:Destroy() end
+end
+
+-- // CRIAR INTERFACE
+local gui = Instance.new("ScreenGui")
+gui.Name = "CSQHubBatTPGUI"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 100
+gui.IgnoreGuiInset = true
+gui.Parent = LP:WaitForChild("PlayerGui")
+
+local main = Instance.new("Frame", gui)
+main.Name = "Main"
+main.Size = UDim2.new(0, 240, 0, 80)
+main.Position = UDim2.new(0.5, -120, 0.5, -40)
+main.BackgroundColor3 = FUNDO
+main.BorderSizePixel = 0
+main.Active = true
+main.ClipsDescendants = true
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+local bordaPrincipal = Instance.new("UIStroke", main)
+bordaPrincipal.Color = ROXO_PRINCIPAL
+bordaPrincipal.Thickness = 2
+
+-- ARRASTAR JANELA
+do
+    local arrastando, entrada, inicioPonto, inicioPos = false, nil, nil, nil
+    main.InputBegan:Connect(function(e)
+        if e.UserInputType == Enum.UserInputType.MouseButton1 or e.UserInputType == Enum.UserInputType.Touch then
+            arrastando = true; inicioPonto = e.Position; inicioPos = main.Position
+            e.Changed:Connect(function() if e.UserInputState == Enum.UserInputState.End then arrastando = false end end)
+        end
+    end)
+    main.InputChanged:Connect(function(e)
+        if e.UserInputType == Enum.UserInputType.MouseMovement or e.UserInputType == Enum.UserInputType.Touch then entrada = e end
+    end)
+    UIS.InputChanged:Connect(function(e)
+        if e == entrada and arrastando then
+            local dx = e.Position.X - inicioPonto.X
+            local dy = e.Position.Y - inicioPonto.Y
+            main.Position = UDim2.new(inicioPos.X.Scale, inicioPos.X.Offset+dx, inicioPos.Y.Scale, inicioPos.Y.Offset+dy)
+        end
+    end)
+end
+
+-- CABEÇALHO
+local cabecalho = Instance.new("Frame", main)
+cabecalho.Size = UDim2.new(1, 0, 0, 40)
+cabecalho.BackgroundColor3 = CARTAO
+cabecalho.BorderSizePixel = 0
+cabecalho.ZIndex = 10
+Instance.new("UICorner", cabecalho).CornerRadius = UDim.new(0, 12)
+
+local divisor = Instance.new("Frame", cabecalho)
+divisor.Size = UDim2.new(1, 0, 0, 2)
+divisor.Position = UDim2.new(0, 0, 1, -2)
+divisor.BackgroundColor3 = ROXO_PRINCIPAL
+divisor.BorderSizePixel = 0
+divisor.ZIndex = 11
+
+local titulo = Instance.new("TextLabel", cabecalho)
+titulo.Size = UDim2.new(0, 180, 1, 0)
+titulo.Position = UDim2.new(0, 14, 0, 0)
+titulo.BackgroundTransparency = 1
+titulo.Text = "CSQ HUB BAT TP"
+titulo.TextColor3 = ROXO_PRINCIPAL
+titulo.Font = Enum.Font.GothamBlack
+titulo.TextSize = 11
+titulo.TextXAlignment = Enum.TextXAlignment.Left
+titulo.ZIndex = 12
+
+-- BOTÃO MODO PC/CELULAR
+local btnModo = Instance.new("TextButton", cabecalho)
+btnModo.Size = UDim2.new(0, 50, 0, 24)
+btnModo.Position = UDim2.new(1, -82, 0.5, -12)
+btnModo.BackgroundColor3 = BOTAO_FUNDO
+btnModo.BorderSizePixel = 0
+btnModo.Text = State.mobileMode and "PC" or "MOBILE"
+btnModo.TextColor3 = ROXO_PRINCIPAL
+btnModo.Font = Enum.Font.GothamBold
+btnModo.TextSize = 8
+btnModo.ZIndex = 15
+Instance.new("UICorner", btnModo).CornerRadius = UDim.new(0, 5)
+local bordaModo = Instance.new("UIStroke", btnModo)
+bordaModo.Color = ROXO_CLARO
+bordaModo.Thickness = 1
+
+-- BOTÃO FECHAR
+local btnFechar = Instance.new("TextButton", cabecalho)
+btnFechar.Size = UDim2.new(0, 24, 0, 24)
+btnFechar.Position = UDim2.new(1, -32, 0.5, -12)
+btnFechar.BackgroundColor3 = CARTAO
+btnFechar.BorderSizePixel = 0
+btnFechar.Text = "X"
+btnFechar.TextColor3 = ROXO_PRINCIPAL
+btnFechar.Font = Enum.Font.GothamBlack
+btnFechar.TextSize = 12
+btnFechar.ZIndex = 15
+Instance.new("UICorner", btnFechar).CornerRadius = UDim.new(0, 6)
+local bordaFechar = Instance.new("UIStroke", btnFechar)
+bordaFechar.Color = BORDA
+
+btnFechar.MouseEnter:Connect(function()
+    TweenService:Create(btnFechar, TweenInfo.new(0.1), {BackgroundColor3 = ROXO_CLARO, TextColor3 = BRANCO}):Play()
+end)
+btnFechar.MouseLeave:Connect(function()
+    TweenService:Create(btnFechar, TweenInfo.new(0.1), {BackgroundColor3 = CARTAO, TextColor3 = ROXO_PRINCIPAL}):Play()
+end)
+btnFechar.MouseButton1Click:Connect(function()
+    State.autoBatToggled = false
+    gui:Destroy()
+end)
+
+-- ÁREA DE CONTEÚDO
+local conteudo = Instance.new("Frame", main)
+conteudo.Size = UDim2.new(1, -20, 1, -50)
+conteudo.Position = UDim2.new(0, 10, 0, 44)
+conteudo.BackgroundTransparency = 1
+conteudo.BorderSizePixel = 0
+conteudo.ZIndex = 10
+
+-- LINHA DO AUTO BAT
+local linhaAlternar = Instance.new("Frame", conteudo)
+linhaAlternar.Size = UDim2.new(1, 0, 0, 32)
+linhaAlternar.BackgroundColor3 = CARTAO
+linhaAlternar.BorderSizePixel = 0
+linhaAlternar.ZIndex = 10
+Instance.new("UICorner", linhaAlternar).CornerRadius = UDim.new(0, 7)
+local bordaLinha = Instance.new("UIStroke", linhaAlternar)
+bordaLinha.Color = BORDA
+
+local textoAlternar = Instance.new("TextLabel", linhaAlternar)
+textoAlternar.Size = UDim2.new(0, 80, 1, 0)
+textoAlternar.Position = UDim2.new(0, 10, 0, 0)
+textoAlternar.BackgroundTransparency = 1
+textoAlternar.Text = "Auto Bat"
+textoAlternar.TextColor3 = CINZA_ESCURO
+textoAlternar.Font = Enum.Font.GothamBold
+textoAlternar.TextSize = 11
+textoAlternar.TextXAlignment = Enum.TextXAlignment.Left
+textoAlternar.ZIndex = 11
+
+-- BOTÃO DE TECLA
+local btnTecla = Instance.new("TextButton", linhaAlternar)
+btnTecla.Size = UDim2.new(0, 44, 0, 20)
+btnTecla.Position = UDim2.new(1, -90, 0.5, -10)
+btnTecla.BackgroundColor3 = BOTAO_FUNDO
+btnTecla.BorderSizePixel = 0
+btnTecla.Text = Keys.autoBat.Name
+btnTecla.TextColor3 = ROXO_PRINCIPAL
+btnTecla.Font = Enum.Font.GothamBold
+btnTecla.TextSize = 8
+btnTecla.ZIndex = 14
+Instance.new("UICorner", btnTecla).CornerRadius = UDim.new(0, 5)
+local bordaTecla = Instance.new("UIStroke", btnTecla)
+bordaTecla.Color = ROXO_CLARO
+bordaTecla.Thickness = 1
+local ouvindoTecla = false; local conexaoTecla
+
+local function pararOuvir(tecla)
+    ouvindoTecla = false
+    if conexaoTecla then conexaoTecla:Disconnect(); conexaoTecla = nil end
+    TweenService:Create(bordaTecla, TweenInfo.new(0.1), {Color = ROXO_CLARO}):Play()
+    btnTecla.TextColor3 = ROXO_PRINCIPAL
+    if tecla then btnTecla.Text = tecla.Name; Keys.autoBat = tecla; saveConfig() end
+end
+
+btnTecla.MouseButton1Click:Connect(function()
+    if ouvindoTecla then pararOuvir(nil); return end
+    ouvindoTecla = true
+    btnTecla.Text = "..."
+    btnTecla.TextColor3 = ROXO_PRINCIPAL
+    TweenService:Create(bordaTecla, TweenInfo.new(0.1), {Color = ROXO_PRINCIPAL}):Play()
+    conexaoTecla = UIS.InputBegan:Connect(function(e)
+        if not ouvindoTecla then return end
+        if e.UserInputType == Enum.UserInputType.Keyboard then
+            if e.KeyCode == Enum.KeyCode.Escape then pararOuvir(nil); return end
+            Keys.autoBatType = "Keyboard"; pararOuvir(e.KeyCode)
+        elseif e.UserInputType == Enum.UserInputType.Gamepad1 then
+            Keys.autoBatType = "Gamepad"; pararOuvir(e.KeyCode)
+        end
+    end)
+end)
+
+-- INTERRUPTOR CIRCULAR
+local fundoInterruptor = Instance.new("Frame", linhaAlternar)
+fundoInterruptor.Size = UDim2.new(0, 36, 0, 19)
+fundoInterruptor.Position = UDim2.new(1, -46, 0.5, -9.5)
+fundoInterruptor.BackgroundColor3 = Color3.fromRGB(220, 220, 235)
+fundoInterruptor.BorderSizePixel = 0
+fundoInterruptor.ZIndex = 13
+Instance.new("UICorner", fundoInterruptor).CornerRadius = UDim.new(0, 10)
+local bordaInterruptor = Instance.new("UIStroke", fundoInterruptor)
+bordaInterruptor.Color = BORDA
+local pontoInterruptor = Instance.new("Frame", fundoInterruptor)
+pontoInterruptor.Size = UDim2.new(0, 13, 0, 13)
+pontoInterruptor.Position = UDim2.new(0, 2, 0.5, -6.5)
+pontoInterruptor.BackgroundColor3 = Color3.fromRGB(100, 100, 120)
+pontoInterruptor.BorderSizePixel = 0
+pontoInterruptor.ZIndex = 14
+Instance.new("UICorner", pontoInterruptor).CornerRadius = UDim.new(0, 4)
+
+-- BOTÃO GRANDE PARA CELULAR
+local btnCelular = Instance.new("TextButton", linhaAlternar)
+btnCelular.Size = UDim2.new(1, -12, 1, -6)
+btnCelular.Position = UDim2.new(0, 6, 0, 3)
+btnCelular.BackgroundColor3 = BOTAO_FUNDO
+btnCelular.BorderSizePixel = 0
+btnCelular.Text = "AUTO BAT"
+btnCelular.TextColor3 = ROXO_PRINCIPAL
+btnCelular.Font = Enum.Font.GothamBold
+btnCelular.TextSize = 11
+btnCelular.Visible = State.mobileMode
+btnCelular.ZIndex = 15
+Instance.new("UICorner", btnCelular).CornerRadius = UDim.new(0, 5)
+local bordaBtnCelular = Instance.new("UIStroke", btnCelular)
+bordaBtnCelular.Color = ROXO_CLARO
+bordaBtnCelular.Thickness = 1
+
+-- ATUALIZAR VISUAL DO INTERRUPTOR
+local function atualizarVisual(ligado)
+    TweenService:Create(fundoInterruptor, TweenInfo.new(0.18), {BackgroundColor3 = ligado and ROXO_PRINCIPAL or Color3.fromRGB(220, 220, 235)}):Play()
+    TweenService:Create(bordaInterruptor, TweenInfo.new(0.18), {Color = ligado and ROXO_CLARO or BORDA}):Play()
+    TweenService:Create(pontoInterruptor, TweenInfo.new(0.18, Enum.EasingStyle.Back), {
+        Position = ligado and UDim2.new(1, -15, 0.5, -6.5) or UDim2.new(0, 2, 0.5, -6.5),
+        BackgroundColor3 = ligado and BRANCO or Color3.fromRGB(100, 100, 120)
+    }):Play()
+    TweenService:Create(btnCelular, TweenInfo.new(0.18), {BackgroundColor3 = ligado and ROXO_PRINCIPAL or BOTAO_FUNDO}):Play()
+    TweenService:Create(bordaBtnCelular, TweenInfo.new(0.18), {Color = ligado and ROXO_PRINCIPAL or ROXO_CLARO}):Play()
+    btnCelular.TextColor3 = ligado and BRANCO or ROXO_PRINCIPAL
+end
+
+-- TROCAR MODO PC/CELULAR
+local function trocarModo()
+    if State.mobileMode then
+        textoAlternar.Visible = false
+        btnTecla.Visible = false
+        fundoInterruptor.Visible = false
+        btnCelular.Visible = true
+        btnModo.Text = "PC"
+    else
+        textoAlternar.Visible = true
+        btnTecla.Visible = true
+        fundoInterruptor.Visible = true
+        btnCelular.Visible = false
+        btnModo.Text = "MOBILE"
+    end
+end
+
+trocarModo()
+
+btnModo.MouseButton1Click:Connect(function()
+    State.mobileMode = not State.mobileMode
+    trocarModo()
+    saveConfig()
+    TweenService:Create(bordaModo, TweenInfo.new(0.15), {Color = ROXO_PRINCIPAL}):Play()
+    task.wait(0.15)
+    TweenService:Create(bordaModo, TweenInfo.new(0.15), {Color = ROXO_CLARO}):Play()
+end)
+
+btnCelular.MouseButton1Click:Connect(function()
+    State.autoBatToggled = not State.autoBatToggled
+    atualizarVisual(State.autoBatToggled)
+end)
+
+-- ÁREA CLICÁVEL PARA ALTERNAR
+local cliqueAlternar = Instance.new("TextButton", linhaAlternar)
+cliqueAlternar.Size = UDim2.new(1, 0, 1, 0)
+cliqueAlternar.BackgroundTransparency = 1
+cliqueAlternar.Text = ""
+cliqueAlternar.ZIndex = 12
+cliqueAlternar.MouseButton1Click:Connect(function()
+    if State.mobileMode then return end
+    State.autoBatToggled = not State.autoBatToggled
+    atualizarVisual(State.autoBatToggled)
+end)
+cliqueAlternar.MouseEnter:Connect(function()
+    if not State.mobileMode then
+        TweenService:Create(linhaAlternar, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(230, 230, 250)}):Play()
+    end
+end)
+cliqueAlternar.MouseLeave:Connect(function()
+    if not State.mobileMode then
+        TweenService:Create(linhaAlternar, TweenInfo.new(0.1), {BackgroundColor3 = CARTAO}):Play()
+    end
+end)
+
+-- LÓGICA DO TACO
+local function pegarTaco()
+    local personagem = LP.Character; if not personagem then return nil end
+    local ferramenta = personagem:FindFirstChild("Bat"); if ferramenta then return ferramenta end
+    local mochila = LP:FindFirstChild("Backpack")
+    if mochila then ferramenta = mochila:FindFirstChild("Bat"); if ferramenta then ferramenta.Parent = personagem; return ferramenta end end
+    return nil
+end
+
+local function tentarBater()
+    if State.hittingCooldown then return end; State.hittingCooldown = true
+    pcall(function()
+        local taco = pegarTaco(); if taco then
+            taco:Activate(); local evento = taco:FindFirstChildWhichIsA("RemoteEvent")
+            if evento then evento:FireServer() end
+        end
+    end)
+    task.delay(0.08, function() State.hittingCooldown = false end)
+end
+
+local function pegarJogadorMaisProximo()
+    if not hrp then return nil, math.huge end
+    local alvo, distancia = nil, math.huge
+    for _, jogador in pairs(Players:GetPlayers()) do
+        if jogador ~= LP and jogador.Character then
+            local parte = jogador.Character:FindFirstChild("HumanoidRootPart")
+            if parte then local d = (hrp.Position - parte.Position).Magnitude; if d < distancia then distancia = d; alvo = jogador end end
+        end
+    end
+    return alvo, distancia
+end
+
+-- CONFIGURAR PERSONAGEM
+local function configurarPersonagem(personagem)
+    task.wait(0.1)
+    h = personagem:WaitForChild("Humanoid", 5); hrp = personagem:WaitForChild("HumanoidRootPart", 5)
+end
+
+LP.CharacterAdded:Connect(configurarPersonagem)
+if LP.Character then task.spawn(configurarPersonagem, LP.Character) end
+
+-- LOOP PRINCIPAL
+RunService.Heartbeat:Connect(function()
+    if not (State.autoBatToggled and h and hrp) then return end
+    local alvo = pegarJogadorMaisProximo()
+    if alvo and alvo.Character then
+        local parteAlvo = alvo.Character:FindFirstChild("HumanoidRootPart")
+        if parteAlvo then
+            if sethiddenproperty then sethiddenproperty(hrp, "PhysicsRepRootPart", parteAlvo) end
+            local posicao = parteAlvo.Position + Vector3.new(0, 0.9, 0)
+            if (hrp.Position - posicao).Magnitude > 8 then hrp.CFrame = CFrame.new(posicao) end
+            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, parteAlvo.Position)
+            tentarBater()
+        end
+    end
+end)
+
+-- TECLAS DE ATALHO
+UIS.InputBegan:Connect(function(e, jogo)
+    if State.mobileMode or jogo then return end
+    if Keys.autoBatType == "Keyboard" and e.UserInputType == Enum.UserInputType.Keyboard then
+        if e.KeyCode == Keys.autoBat then State.autoBatToggled = not State.autoBatToggled; atualizarVisual(State.autoBatToggled)
+        elseif e.KeyCode == Keys.guiHide then State.guiVisible = not State.guiVisible; main.Visible = State.guiVisible end
+    elseif Keys.autoBatType == "Gamepad" and e.UserInputType == Enum.UserInputType.Gamepad1 then
+        if e.KeyCode == Keys.autoBat then State.autoBatToggled = not State.autoBatToggled; atualizarVisual(State.autoBatToggled) end
+    end
+end)
